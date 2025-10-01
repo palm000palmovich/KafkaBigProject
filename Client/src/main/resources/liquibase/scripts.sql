@@ -1,0 +1,26 @@
+-- liquibase formatted sql
+
+--changeset IvanTyapkin:2
+
+CREATE TABLE items (
+    id BIGINT PRIMARY KEY,
+    product_id VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255),
+    description TEXT,
+    amount BIGINT,
+    currency VARCHAR(10),
+    category VARCHAR(255),
+    brand VARCHAR(255),
+    tags TEXT,
+    specifications TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id BIGINT NOT NULL,
+    item_id BIGINT NOT NULL UNIQUE,
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);
