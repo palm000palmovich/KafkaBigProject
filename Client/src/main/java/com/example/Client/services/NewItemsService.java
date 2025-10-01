@@ -1,5 +1,6 @@
 package com.example.Client.services;
 
+import com.example.Client.mapper.ItemMapper;
 import com.example.Client.model.ItemEntity;
 import com.example.Client.repositories.ItemEntityRepository;
 import com.example.Shop.dto.Item;
@@ -13,9 +14,16 @@ import org.springframework.stereotype.Service;
 public class NewItemsService {
     private Logger logger = LoggerFactory.getLogger(NewItemsService.class);
     private final ItemEntityRepository itemEntityRepository;
-    private final NewItemsService newItemsService;
+    private final ItemMapper itemMapper;
 
-    public ItemEntity saveNewItem(Item item) {
-        return null;
+    public void saveNewItem(Item item) {
+        try {
+            ItemEntity savedItem = itemEntityRepository.save(
+                    itemMapper.dtoToEntity(item)
+            );
+            logger.info("Новый товар успешно сохранен в БД: {}", savedItem.toString());
+        } catch (Exception ex) {
+            logger.error("Saving error: {}", ex.getMessage());
+        }
     }
 }

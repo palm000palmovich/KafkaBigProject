@@ -3,18 +3,29 @@ package common.vars.dto;
 import java.time.LocalDateTime;
 
 public class OrderEvent {
+    private Long orderId;
     private Long userId;
     private LocalDateTime createdAt;
     private String productId;
 
 
-    public OrderEvent(Long userId, LocalDateTime createdAt, String productId) {
+    public OrderEvent(Long orderId, Long userId, LocalDateTime createdAt,
+                      String productId) {
+        this.orderId = orderId;
         this.userId = userId;
         this.createdAt = createdAt;
         this.productId = productId;
     }
 
     public OrderEvent() {}
+
+    public Long getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(Long orderId) {
+        this.orderId = orderId;
+    }
 
     public Long getUserId() {
         return userId;
