@@ -3,12 +3,23 @@ x-common-env: &common-env
   KAFKA_CFG_PROCESS_ROLES: "broker,controller"
   ALLOW_PLAINTEXT_LISTENER: "yes"
   KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-  KAFKA_KRAFT_CLUSTER_ID: "abcdefghijklmnopqrstuv"
+  KAFKA_KRAFT_CLUSTER_ID: "AAAAAAAAAAAAAAAAAAAAAA"
   KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
   KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
   KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093"
 
+x-second-cluster-env: &second-cluster-env
+  KAFKA_ENABLE_KRAFT: "yes"
+  KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+  ALLOW_PLAINTEXT_LISTENER: "yes"
+  KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+  KAFKA_KRAFT_CLUSTER_ID: "BBBBBBBBBBBBBBBBBBBBBB"
+  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+  KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+  KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "10@kafka-second-0:9093,11@kafka-second-1:9093,12@kafka-second-2:9093"
+
 services:
+  # ПЕРВЫЙ КЛАСТЕР Kafka
   kafka-0:
     image: bitnami/kafka:3.4
     hostname: kafka-0
@@ -57,6 +68,155 @@ services:
     networks:
       - kafka-net
 
+  # ВТОРОЙ КЛАСТЕР Kafka
+  kafka-second-0:
+    image: bitnami/kafka:3.4
+    hostname: kafka-second-0
+    container_name: kafka-second-0
+    ports:
+      - "9097:9094"
+    environment:
+      <<: *second-cluster-env
+      KAFKA_CFG_NODE_ID: "10"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-0:9092,EXTERNAL://127.0.0.1:9097"
+    volumes:
+      - kafka_second_0_data:/bitnami/kafka
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  kafka-second-1:
+    image: bitnami/kafka:3.4
+    hostname: kafka-second-1
+    container_name: kafka-second-1
+    ports:
+      - "9098:9094"
+    environment:
+      <<: *second-cluster-env
+      KAFKA_CFG_NODE_ID: "11"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-1:9092,EXTERNAL://127.0.0.1:9098"
+    volumes:
+      - kafka_second_1_data:/bitnami/kafka
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  kafka-second-2:
+    image: bitnami/kafka:3.4
+    hostname: kafka-second-2
+    container_name: kafka-second-2
+    ports:
+      - "9099:9094"
+    environment:
+      <<: *second-cluster-env
+      KAFKA_CFG_NODE_ID: "12"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-2:9092,EXTERNAL://127.0.0.1:9099"
+    volumes:
+      - kafka_second_2_data:/bitnami/kafka
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  # MirrorMaker
+  kafka-mirrormaker:
+    image: bitnami/kafka:3.4
+    container_name: kafka-mirrormaker
+    command: >
+      bash -c "
+        sleep 30 &&
+        /opt/bitnami/kafka/bin/kafka-mirror-maker.sh 
+          --consumer.config /opt/bitnami/kafka/config/consumer.properties 
+          --producer.config /opt/bitnami/kafka/config/producer.properties 
+          --whitelist='.*' 
+          --num.streams=1
+      "
+    environment:
+      # Consumer config (читает из первого кластера)
+      KAFKA_CONSUMER_BOOTSTRAP_SERVERS: "kafka-0:9092,kafka-1:9092,kafka-2:9092"
+      KAFKA_CONSUMER_GROUP_ID: "mirrormaker-group"
+      KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"
+
+      # Producer config (пишет во второй кластер)
+      KAFKA_PRODUCER_BOOTSTRAP_SERVERS: "kafka-second-0:9092,kafka-second-1:9092,kafka-second-2:9092"
+    volumes:
+      - ./consumer.properties:/opt/bitnami/kafka/config/consumer.properties
+      - ./producer.properties:/opt/bitnami/kafka/config/producer.properties
+    depends_on:
+      - kafka-0
+      - kafka-1
+      - kafka-2
+      - kafka-second-0
+      - kafka-second-1
+      - kafka-second-2
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  # HDFS
+  hadoop-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: hadoop-namenode
+    ports:
+      - "9870:9870"   # Web UI
+      - "9000:9000"   # FS
+    environment:
+      - CLUSTER_NAME=test
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  hadoop-datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: hadoop-datanode
+    ports:
+      - "9864:9864"
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-namenode:9000
+    depends_on:
+      - hadoop-namenode
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+  # Существующие сервисы
   postgres:
     image: postgres:15
     container_name: postgreDB
@@ -80,10 +240,15 @@ services:
     environment:
       KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: "kafka-0:9092,kafka-1:9092,kafka-2:9092"
       KAFKA_CLUSTERS_0_NAME: "kraft_kafka"
+      KAFKA_CLUSTERS_1_BOOTSTRAP_SERVERS: "kafka-second-0:9092,kafka-second-1:9092,kafka-second-2:9092"
+      KAFKA_CLUSTERS_1_NAME: "second_kafka_cluster"
     depends_on:
       - kafka-0
       - kafka-1
       - kafka-2
+      - kafka-second-0
+      - kafka-second-1
+      - kafka-second-2
     restart: unless-stopped
     networks:
       - kafka-net
@@ -92,7 +257,14 @@ volumes:
   kafka_0_data:
   kafka_1_data:
   kafka_2_data:
+  kafka_second_0_data:
+  kafka_second_1_data:
+  kafka_second_2_data:
   postgres_data:
+  hadoop_namenode:
+  hadoop_datanode:
+  prometheus_data:
+  grafana_data:
 
 networks:
   kafka-net:
