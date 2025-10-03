@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
@@ -32,34 +31,25 @@ public class ShopService {
             item.setUpdatedAt(LocalDateTime.now());
         }
 
-        //В любом случае отправляем в inputTopic
-        Item item1 = sendItemToInputTopic(item);
+        kafkaTemplate.send(inputTopic, item.getProductId(), item)
+                .whenComplete((result, exception) -> {
+                    if (exception != null) {
+                        logger.error("Failed to send item {} to Kafka: {}",
+                                item.getProductId(), exception.getMessage());
+                    } else {
+                        logger.info("Item {} successfully sent to Kafka. Partition: {}, Offset: {}",
+                                item.getProductId(),
+                                result.getRecordMetadata().partition(),
+                                result.getRecordMetadata().offset());
+                    }
+                });
 
         //Потом в случае невалидного товара выкидываем CensoreException
         if (!productValidationService.isValidProduct(item)){
             throw new CensoreException("Invalid item");
         }
 
-        return item1;
-    }
-
-    private Item sendItemToInputTopic(Item item) {
-        logger.info("Попытка отправки нового айтема в топик {}.", inputTopic);
-        try {
-            // Синхронная отправка с ожиданием результата
-            SendResult<String, Item> result = kafkaTemplate.send(inputTopic, item.getProductId(), item)
-                    .get(); // Ждем подтверждения
-
-            logger.info("Item {} successfully sent to Kafka. Partition: {}, Offset: {}",
-                    item.getProductId(),
-                    result.getRecordMetadata().partition(),
-                    result.getRecordMetadata().offset());
-
-            return item;
-        } catch (Exception e) {
-            logger.error("Error sending to kafka topic: {}", e.getMessage());
-            throw new RuntimeException(e.getMessage());
-        }
+        return item;
     }
 
 }
