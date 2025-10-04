@@ -33,6 +33,7 @@ public class KafkaProducerConfig {
         config.put(ProducerConfig.LINGER_MS_CONFIG, 1);
         config.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
 
+        // SSL конфигурация будет подхвачена из application.yml
         return new DefaultKafkaProducerFactory<>(config);
     }
 

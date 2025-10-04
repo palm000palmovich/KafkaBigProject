@@ -42,6 +42,7 @@ public class KafkaConfiguration {
         props.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
         props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, "com.example.Shop.dto.Item");
 
+        // SSL конфигурация будет подхвачена из application.properties
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
@@ -50,8 +51,6 @@ public class KafkaConfiguration {
         ConcurrentKafkaListenerContainerFactory<String, Item> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
-
-        // ВКЛЮЧАЕМ РУЧНОЕ ПОДТВЕРЖДЕНИЕ
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         return factory;
     }
@@ -69,8 +68,8 @@ public class KafkaConfiguration {
         config.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 33554432);
         config.put(ProducerConfig.LINGER_MS_CONFIG, 1);
         config.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
-        //Для транзакций
         config.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "client-api-tx");
+
         return new DefaultKafkaProducerFactory<>(config);
     }
 

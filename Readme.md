@@ -8,7 +8,45 @@
 1) ShopAPI:
 
 а) Создание сущностей для парсинга json-объекта:
-![models.jpg](screenshots/models.jpg)
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Item {
+    @JsonProperty("product_id")
+    private String productId;
+    private String name;
+    private String description;
+    private Price price;
+    private String category;
+    private String brand;
+    private Stock stock;
+    private String sku;
+    private List<String> tags;
+    private Map<String, String> specifications;
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
+    @JsonProperty("updated_at")
+    private LocalDateTime updatedAt;
+    private String index;
+    @JsonProperty("store_id")
+    private String storeId;
+}`
+
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Price {
+    private String currency;
+    private Long amount;
+}`
+
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Stock {
+    private Long available;
+    private Long reserved;
+}`
 
 б) ShopController - рест-контроллер для получения новых товаров.
 в) ProductValidationService - сервис валидации цензуры новых товаров.
