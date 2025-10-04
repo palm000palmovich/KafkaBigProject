@@ -18,7 +18,6 @@ public class ShopService {
     private final KafkaTemplate<String, Item> kafkaTemplate;
     private final ProductValidationService productValidationService;
 
-
     @Value("${app.kafka.topics.input}")
     private String inputTopic;
 

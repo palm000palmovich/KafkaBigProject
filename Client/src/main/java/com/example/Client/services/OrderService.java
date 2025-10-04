@@ -1,11 +1,13 @@
 package com.example.Client.services;
 
 
+import com.example.Client.exceptions.SendingTransactionException;
 import com.example.Client.model.ItemEntity;
 import com.example.Client.model.OrderEntity;
 import com.example.Client.repositories.ItemEntityRepository;
 import com.example.Client.repositories.OrderEntityRepository;
 import common.vars.dto.OrderEvent;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
@@ -26,6 +28,7 @@ public class OrderService {
     @Value("${app.kafka.topics.output}")
     private String orderedItemsTopic;
 
+    @Transactional
     public OrderEntity saveNewOrder(Long userId, Long itemId) {
         ItemEntity foundItem = itemEntityRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found."));
@@ -36,23 +39,41 @@ public class OrderService {
         orderEntity.setCreatedAt(LocalDateTime.now());
         orderEntity.setItem(foundItem);
 
-        try {
-            OrderEntity savedOrder = orderEntityRepository.save(orderEntity);
-            logger.info("Новый заказ успешно сохранен в БД.");
+        OrderEntity savedOrder = orderEntityRepository.save(orderEntity);
 
-            OrderEvent orderEvent = new OrderEvent();
-            orderEvent.setOrderId(savedOrder.getId());
-            orderEvent.setUserId(userId);
-            orderEvent.setCreatedAt(savedOrder.getCreatedAt());
-            orderEvent.setProductId(foundItem.getProductId());
-            logger.info("Информация по заказу для отправки в топик: {}", orderEvent);
-            kafkaTemplate.send(orderedItemsTopic, orderEvent);
-            logger.info("Информация по заказу {} отправлена в топик.", orderEvent);
+        kafkaTemplate.executeInTransaction(operations -> {
+            OrderEvent orderEvent = createOrderEvent(savedOrder.getId(), userId,
+                    savedOrder.getCreatedAt(), foundItem.getProductId());
 
-            return savedOrder;
-        } catch (Exception e) {
-            throw new RuntimeException(e.getMessage());
-        }
+            // Асинхронная отправка внутри транзакции
+            return operations.send(orderedItemsTopic, orderEvent)
+                    .thenApply(result -> {
+                        logger.info("Order event sent. Partition: {}, Offset: {}",
+                                result.getRecordMetadata().partition(),
+                                result.getRecordMetadata().offset());
+                        return result;
+                    })
+                    .exceptionally(throwable -> {
+                        // Если ошибка - транзакция откатится
+                        throw new SendingTransactionException("Kafka transaction failed: "
+                                + throwable.getMessage());
+                    });
+        });
+
+        logger.info("Новый заказ успешно сохранен в БД.");
+        return savedOrder;
+
+    }
+
+    private OrderEvent createOrderEvent(Long orderId, Long userId,
+                                        LocalDateTime orderTime, String productId) {
+        OrderEvent orderEvent = new OrderEvent();
+        orderEvent.setOrderId(orderId);
+        orderEvent.setUserId(userId);
+        orderEvent.setCreatedAt(orderTime);
+        orderEvent.setProductId(productId);
+
+        return orderEvent;
     }
 
 }
