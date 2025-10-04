@@ -24,12 +24,11 @@ x-common-env: &common-env
   KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093"
 
   # SSL настройки
-  <<: *ssl-env
+  <<: [*ssl-env, *jmx-env]
+
   KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
   KAFKA_CFG_SSL_PROTOCOL: "TLSv1.3"
 
-  # JMX настройки
-  <<: *jmx-env
 
 x-second-cluster-env: &second-cluster-env
   KAFKA_ENABLE_KRAFT: "yes"
