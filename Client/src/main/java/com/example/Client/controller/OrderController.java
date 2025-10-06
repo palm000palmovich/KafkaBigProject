@@ -1,5 +1,6 @@
 package com.example.Client.controller;
 
+import com.example.Client.exceptions.SendingTransactionException;
 import com.example.Client.model.OrderEntity;
 import com.example.Client.services.OrderService;
 import lombok.RequiredArgsConstructor;

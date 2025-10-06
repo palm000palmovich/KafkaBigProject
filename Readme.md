@@ -8,7 +8,45 @@
 1) ShopAPI:
 
 а) Создание сущностей для парсинга json-объекта:
-![models.jpg](screenshots/models.jpg)
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Item {
+    @JsonProperty("product_id")
+    private String productId;
+    private String name;
+    private String description;
+    private Price price;
+    private String category;
+    private String brand;
+    private Stock stock;
+    private String sku;
+    private List<String> tags;
+    private Map<String, String> specifications;
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
+    @JsonProperty("updated_at")
+    private LocalDateTime updatedAt;
+    private String index;
+    @JsonProperty("store_id")
+    private String storeId;
+}`
+
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Price {
+    private String currency;
+    private Long amount;
+}`
+
+`@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Stock {
+    private Long available;
+    private Long reserved;
+}`
 
 б) ShopController - рест-контроллер для получения новых товаров.
 в) ProductValidationService - сервис валидации цензуры новых товаров.
@@ -98,3 +136,16 @@ values
 ![IMAGE 2025-10-02 10:00:21.jpg](screenshots/IMAGE%202025-10-02%2010%3A00%3A21.jpg)
 _____________________________________________________________________________________________________________________________________________
 ![IMAGE 2025-10-02 10:01:14.jpg](screenshots/IMAGE%202025-10-02%2010%3A01%3A14.jpg)
+
+
+
+!!!!!Правки 03.10 - 04.10!!!!!!
+1) Теперь в микросервисе Shop в классе ShopService.java асинхронная отправка сообщения в топик, убрал блокирующий метод .get()
+2) В микросервисе Client в классе NewItemsConsumer.java добавил обработку ошибок чтения из топика, информация о проблемных сообщениях теперь 
+отправляется в DLQ.
+3) В микросервисе Client в классе OrderService.java отправка в кафка-топик ordered_items и сохранение нового заказа в БД происходят
+консистентно, в случае сбоя на одной из сторон, сообщение не будет ни сохранено в БД, ни отправлено в топик.
+4) Настроил безопасную передачу сообщений по кафке. Теперь это происходит с использованием TLS-сертификации.
+5) Настроил метрики. Прописал правильный конфиг для Prometheus, создал дашборды для Grafana.
+
+

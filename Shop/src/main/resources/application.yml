@@ -5,9 +5,15 @@ spring:
     charset: UTF-8
   mandatory-file-encoding: UTF-8
   kafka:
-    bootstrap-servers: 127.0.0.1:9094,127.0.0.1:9095,127.0.0.1:9096
+    bootstrap-servers: kafka-0:9092,kafka-1:9092,kafka-2:9092
     properties:
-      security.protocol: PLAINTEXT
+      security.protocol: SSL
+      ssl.keystore.location: classpath:ssl/client-keystore.jks
+      ssl.keystore.password: password123
+      ssl.keystore.type: JKS
+      ssl.truststore.location: classpath:ssl/client-truststore.jks
+      ssl.truststore.password: password123
+      ssl.endpoint.identification.algorithm: ""
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -16,36 +22,26 @@ spring:
       batch-size: 16384
       buffer-memory: 33554432
       properties:
-        spring:
-          json:
-            add:
-              type:
-                headers: false
+        spring.json.add.type.headers: false
     consumer:
       properties:
-        spring:
-          json:
-            trusted:
-              packages: "com.example.Shop.*"
+        spring.json.trusted.packages: "com.example.Shop.*"
     streams:
       application-id: product-validation-stream
       properties:
-        default:
-          key:
-            serde: org.apache.kafka.common.serialization.Serdes$StringSerde
-          value:
-            serde: org.springframework.kafka.support.serializer.JsonSerde
-        commit:
-          interval:
-            ms: 1000
-        statestore:
-          cache:
-            max:
-              bytes: 0
-        spring:
-          json:
-            trusted:
-              packages: "com.example.Shop.*"
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: org.springframework.kafka.support.serializer.JsonSerde
+        commit.interval.ms: 1000
+        statestore.cache.max.bytes: 0
+        spring.json.trusted.packages: "com.example.Shop.*"
+        # SSL для Kafka Streams
+        security.protocol: SSL
+        ssl.keystore.location: classpath:ssl/client-keystore.jks
+        ssl.keystore.password: password123
+        ssl.keystore.type: JKS
+        ssl.truststore.location: classpath:ssl/client-truststore.jks
+        ssl.truststore.password: password123
+        ssl.endpoint.identification.algorithm: ""
 
 server:
   port: 8081

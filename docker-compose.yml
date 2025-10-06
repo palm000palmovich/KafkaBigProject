@@ -1,37 +1,70 @@
+x-ssl-env: &ssl-env
+  KAFKA_CFG_SSL_KEYSTORE_LOCATION: /opt/bitnami/kafka/config/certs/kafka.keystore.jks
+  KAFKA_CFG_SSL_KEYSTORE_PASSWORD: password123
+  KAFKA_CFG_SSL_KEYSTORE_TYPE: JKS
+  KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: /opt/bitnami/kafka/config/certs/kafka.truststore.jks
+  KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: password123
+  KAFKA_CFG_SSL_CLIENT_AUTH: required
+  KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ""
+
+x-jmx-env: &jmx-env
+  KAFKA_JMX_OPTS: "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false 
+  -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999 
+  -javaagent:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar=8080:/opt/bitnami/kafka/config/jmx_exporter_config.yml"
+
 x-common-env: &common-env
   KAFKA_ENABLE_KRAFT: "yes"
   KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-  ALLOW_PLAINTEXT_LISTENER: "yes"
   KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
   KAFKA_KRAFT_CLUSTER_ID: "AAAAAAAAAAAAAAAAAAAAAA"
-  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-  KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+
+  # SSL конфигурация listeners
+  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:SSL,INTERNAL:SSL,EXTERNAL:SSL"
+  KAFKA_CFG_LISTENERS: "INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
   KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093"
+
+  # SSL настройки
+  <<: [*ssl-env, *jmx-env]
+
+  KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+  KAFKA_CFG_SSL_PROTOCOL: "TLSv1.3"
+
 
 x-second-cluster-env: &second-cluster-env
   KAFKA_ENABLE_KRAFT: "yes"
   KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-  ALLOW_PLAINTEXT_LISTENER: "yes"
   KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
   KAFKA_KRAFT_CLUSTER_ID: "BBBBBBBBBBBBBBBBBBBBBB"
-  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-  KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+
+  # SSL конфигурация listeners
+  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:SSL,INTERNAL:SSL,EXTERNAL:SSL"
+  KAFKA_CFG_LISTENERS: "INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
   KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "10@kafka-second-0:9093,11@kafka-second-1:9093,12@kafka-second-2:9093"
 
+  # SSL настройки
+  <<: *ssl-env
+  KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+  KAFKA_CFG_SSL_PROTOCOL: "TLSv1.3"
+
 services:
-  # ПЕРВЫЙ КЛАСТЕР Kafka
+  # ПЕРВЫЙ КЛАСТЕР Kafka(защищенный)
   kafka-0:
     image: bitnami/kafka:3.4
     hostname: kafka-0
     container_name: kafka-0
     ports:
       - "9094:9094"
+      - "7080:8080"  # JMX Exporter метрики
     environment:
       <<: *common-env
       KAFKA_CFG_NODE_ID: "0"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-0:9092,EXTERNAL://127.0.0.1:9094"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-0:9092,EXTERNAL://127.0.0.1:9094"
     volumes:
       - kafka_0_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-0-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-0-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -42,12 +75,17 @@ services:
     container_name: kafka-1
     ports:
       - "9095:9094"
+      - "7081:8080"  # JMX Exporter метрики
     environment:
       <<: *common-env
       KAFKA_CFG_NODE_ID: "1"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-1:9092,EXTERNAL://127.0.0.1:9095"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-1:9092,EXTERNAL://127.0.0.1:9095"
     volumes:
       - kafka_1_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-1-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-1-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -58,12 +96,17 @@ services:
     container_name: kafka-2
     ports:
       - "9096:9094"
+      - "7082:8080"  # JMX Exporter метрики
     environment:
       <<: *common-env
       KAFKA_CFG_NODE_ID: "2"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-2:9092,EXTERNAL://127.0.0.1:9096"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-2:9092,EXTERNAL://127.0.0.1:9096"
     volumes:
       - kafka_2_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-2-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-2-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -75,12 +118,17 @@ services:
     container_name: kafka-second-0
     ports:
       - "9097:9094"
+      - "7083:8080"  # JMX Exporter метрики
     environment:
       <<: *second-cluster-env
       KAFKA_CFG_NODE_ID: "10"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-0:9092,EXTERNAL://127.0.0.1:9097"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-second-0:9092,EXTERNAL://127.0.0.1:9097"
     volumes:
       - kafka_second_0_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-second-0-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-second-0-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -91,12 +139,17 @@ services:
     container_name: kafka-second-1
     ports:
       - "9098:9094"
+      - "7084:8080"  # JMX Exporter метрики
     environment:
       <<: *second-cluster-env
       KAFKA_CFG_NODE_ID: "11"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-1:9092,EXTERNAL://127.0.0.1:9098"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-second-1:9092,EXTERNAL://127.0.0.1:9098"
     volumes:
       - kafka_second_1_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-second-1-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-second-1-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -107,12 +160,17 @@ services:
     container_name: kafka-second-2
     ports:
       - "9099:9094"
+      - "7085:8080"  # JMX Exporter метрики
     environment:
       <<: *second-cluster-env
       KAFKA_CFG_NODE_ID: "12"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-second-2:9092,EXTERNAL://127.0.0.1:9099"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka-second-2:9092,EXTERNAL://127.0.0.1:9099"
     volumes:
       - kafka_second_2_data:/bitnami/kafka
+      - ./kafka-ssl/kafka-second-2-keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./kafka-ssl/kafka-second-2-truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./jmx_prometheus_javaagent.jar:/opt/bitnami/kafka/jmx_prometheus_javaagent.jar:ro
+      - ./jmx_exporter_config.yml:/opt/bitnami/kafka/config/jmx_exporter_config.yml:ro
     restart: unless-stopped
     networks:
       - kafka-net
@@ -123,7 +181,7 @@ services:
     container_name: kafka-mirrormaker
     command: >
       bash -c "
-        sleep 30 &&
+        sleep 60 &&
         /opt/bitnami/kafka/bin/kafka-mirror-maker.sh 
           --consumer.config /opt/bitnami/kafka/config/consumer.properties 
           --producer.config /opt/bitnami/kafka/config/producer.properties 
@@ -131,16 +189,28 @@ services:
           --num.streams=1
       "
     environment:
-      # Consumer config (читает из первого кластера)
+      # SSL consumer config (читает из первого кластера)
       KAFKA_CONSUMER_BOOTSTRAP_SERVERS: "kafka-0:9092,kafka-1:9092,kafka-2:9092"
       KAFKA_CONSUMER_GROUP_ID: "mirrormaker-group"
       KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"
+      KAFKA_CONSUMER_SECURITY_PROTOCOL: "SSL"
+      KAFKA_CONSUMER_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/client-keystore.jks"
+      KAFKA_CONSUMER_SSL_KEYSTORE_PASSWORD: "password123"
+      KAFKA_CONSUMER_SSL_KEYSTORE_TYPE: "JKS"
+      KAFKA_CONSUMER_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/client-truststore.jks"
+      KAFKA_CONSUMER_SSL_TRUSTSTORE_PASSWORD: "password123"
 
-      # Producer config (пишет во второй кластер)
+      # SSL producer config (пишет во второй кластер)
       KAFKA_PRODUCER_BOOTSTRAP_SERVERS: "kafka-second-0:9092,kafka-second-1:9092,kafka-second-2:9092"
+      KAFKA_PRODUCER_SECURITY_PROTOCOL: "SSL"
+      KAFKA_PRODUCER_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/client-keystore.jks"
+      KAFKA_PRODUCER_SSL_KEYSTORE_PASSWORD: "password123"
+      KAFKA_PRODUCER_SSL_KEYSTORE_TYPE: "JKS"
+      KAFKA_PRODUCER_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/client-truststore.jks"
+      KAFKA_PRODUCER_SSL_TRUSTSTORE_PASSWORD: "password123"
     volumes:
-      - ./consumer.properties:/opt/bitnami/kafka/config/consumer.properties
-      - ./producer.properties:/opt/bitnami/kafka/config/producer.properties
+      - ./kafka-ssl/client-keystore.jks:/opt/bitnami/kafka/config/certs/client-keystore.jks:ro
+      - ./kafka-ssl/client-truststore.jks:/opt/bitnami/kafka/config/certs/client-truststore.jks:ro
     depends_on:
       - kafka-0
       - kafka-1
@@ -210,13 +280,14 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     restart: unless-stopped
     networks:
       - kafka-net
 
-  # Существующие сервисы
   postgres:
     image: postgres:15
     container_name: postgreDB
@@ -240,8 +311,24 @@ services:
     environment:
       KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: "kafka-0:9092,kafka-1:9092,kafka-2:9092"
       KAFKA_CLUSTERS_0_NAME: "kraft_kafka"
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: "SSL"
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_LOCATION: "/certs/client-keystore.jks"
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_PASSWORD: "password123"
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_TYPE: "JKS"
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION: "/certs/client-truststore.jks"
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD: "password123"
+
       KAFKA_CLUSTERS_1_BOOTSTRAP_SERVERS: "kafka-second-0:9092,kafka-second-1:9092,kafka-second-2:9092"
       KAFKA_CLUSTERS_1_NAME: "second_kafka_cluster"
+      KAFKA_CLUSTERS_1_PROPERTIES_SECURITY_PROTOCOL: "SSL"
+      KAFKA_CLUSTERS_1_PROPERTIES_SSL_KEYSTORE_LOCATION: "/certs/client-keystore.jks"
+      KAFKA_CLUSTERS_1_PROPERTIES_SSL_KEYSTORE_PASSWORD: "password123"
+      KAFKA_CLUSTERS_1_PROPERTIES_SSL_KEYSTORE_TYPE: "JKS"
+      KAFKA_CLUSTERS_1_PROPERTIES_SSL_TRUSTSTORE_LOCATION: "/certs/client-truststore.jks"
+      KAFKA_CLUSTERS_1_PROPERTIES_SSL_TRUSTSTORE_PASSWORD: "password123"
+    volumes:
+      - ./kafka-ssl/client-keystore.jks:/certs/client-keystore.jks:ro
+      - ./kafka-ssl/client-truststore.jks:/certs/client-truststore.jks:ro
     depends_on:
       - kafka-0
       - kafka-1
